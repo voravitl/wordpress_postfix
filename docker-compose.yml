@@ -1,0 +1,74 @@
+version: '3.5'
+
+services:
+   db:
+     container_name: ${CONTAINER_DB_NAME}
+     image: mariadb:latest
+     restart: always
+     ports:
+       - 3306:3306
+     volumes:
+        - ${DB_PATH}:/var/lib/mysql
+     networks:
+        - wordpress
+     environment:
+       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+       MYSQL_DATABASE: ${MYSQL_DATABASE}
+       MYSQL_USER: ${MYSQL_USER}
+       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+     logging:
+      driver: syslog
+      options:
+        tag: wordpress/${CONTAINER_DB_NAME}
+
+   wordpress:
+     depends_on:
+       - db
+     container_name: ${CONTAINER_WP_NAME}
+     image: wordpress
+     restart: always
+     volumes:
+       - ${WP_CORE}:/var/www/html
+       - /opt/conf/main.cf:/etc/postfix/main.cf
+       - /opt/conf/aliases:/etc/aliases
+     networks:
+        - wordpress
+     environment:
+       WORDPRESS_DB_HOST: ${CONTAINER_DB_NAME}:3306
+       WORDPRESS_DB_NAME: ${MYSQL_DATABASE}
+       WORDPRESS_DB_USER: ${MYSQL_USER}
+       WORDPRESS_DB_PASSWORD: ${MYSQL_PASSWORD}
+       WORDPRESS_TABLE_PREFIX: ${WORDPRESS_TABLE_PREFIX}
+       VIRTUAL_HOST: ${DOMAINS}
+     logging:
+       driver: syslog
+       options:
+         tag: wordpress/${CONTAINER_WP_NAME}
+
+   ssl:
+     depends_on:
+       - wordpress
+     container_name: ${CONTAINER_WEB_NAME}
+     image: justsml/ssl-proxy:latest
+     restart: always
+     networks:
+        - wordpress
+     ports:
+       - 443:443
+       - 80:80
+     environment:
+         HTTPS_PORT: 443
+         SERVER_NAME: ${SERVER_NAME}
+         UPSTREAM_TARGET: wordpress:80
+         CERT_PUBLIC_PATH: /certs/fullchain.pem
+         CERT_PRIVATE_PATH: /certs/privkey.pem
+     volumes:
+       - /opt/ssl:/certs:ro
+     logging:
+      driver: syslog
+      options:
+        tag: wordpress/${CONTAINER_WEB_NAME}
+
+networks:
+  wordpress:
+   name: wordpress_network
